@@ -2,6 +2,12 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 
+
+
+
+
+
+
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAiu-KflWJ9sLQHpfQ0x6VsDUoQ8PxYE0Y",
@@ -27,4 +33,6 @@ export const auth = getAuth(app);
 
 export { app, analytics };
 export default app;
+
+
 
