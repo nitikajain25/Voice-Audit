@@ -80,31 +80,43 @@ const ChatPage = () => {
     };
   }, []);
 
-  useEffect(() => {
+  /**
+   * Refresh chats from Firestore using user ID
+   * This function always fetches the latest chats from Firestore database
+   */
+  const refreshChatsFromFirestore = async (loadFirstChatMessages: boolean = false) => {
     if (!currentUser) {
-      navigate('/auth');
+      console.warn('⚠️ No current user, cannot refresh chats');
       return;
     }
 
-    // Load user data and chats on mount - always fetch from Firestore
+    console.log(`📡 Refreshing chats from Firestore for user ID: ${currentUser.uid}`);
     setIsLoadingChats(true);
-    loadUserChats(currentUser.uid)
-      .then((chats) => {
-        if (chats.length > 0) {
-          // Convert FirestoreChatHistory to ChatHistory format
-          const formattedChats: ChatHistory[] = chats.map((chat) => ({
-            id: chat.id || Date.now().toString(),
-            title: chat.title,
-            messages: [],
-            createdAt: chat.createdAt instanceof Date ? chat.createdAt : new Date(),
-          }));
-          setChatHistories(formattedChats);
-          
-          // Load messages for the first chat (most recently updated)
+    
+    try {
+      // Always fetch from Firestore using user ID
+      const chats = await loadUserChats(currentUser.uid);
+      console.log(`✅ Fetched ${chats.length} chats from Firestore for user ${currentUser.uid}:`, chats);
+      
+      if (chats.length > 0) {
+        // Convert FirestoreChatHistory to ChatHistory format
+        const formattedChats: ChatHistory[] = chats.map((chat) => ({
+          id: chat.id || Date.now().toString(),
+          title: chat.title,
+          messages: [],
+          createdAt: chat.createdAt instanceof Date ? chat.createdAt : new Date(),
+        }));
+        setChatHistories(formattedChats);
+        
+        // Load messages for the first chat (most recently updated) if requested
+        if (loadFirstChatMessages) {
           const firstChat = chats[0];
           if (firstChat.id) {
             setCurrentChatId(firstChat.id);
-            loadChatMessages(firstChat.id).then((loadedMessages) => {
+            try {
+              const loadedMessages = await loadChatMessages(firstChat.id);
+              console.log(`✅ Fetched ${loadedMessages.length} messages for chat ${firstChat.id}`);
+              
               if (loadedMessages.length > 0) {
                 const formattedMessages: Message[] = loadedMessages.map((msg) => ({
                   id: msg.id || Date.now().toString(),
@@ -122,18 +134,17 @@ const ChatPage = () => {
                   timestamp: new Date(),
                 }]);
               }
-              setIsLoadingChats(false);
-            }).catch((error) => {
-              console.error('Error loading messages:', error);
-              setIsLoadingChats(false);
-            });
-          } else {
-            setIsLoadingChats(false);
+            } catch (error: any) {
+              console.error('❌ Error loading messages:', error);
+              showNotification(`Failed to load messages: ${error.message}`, 'error');
+            }
           }
-        } else {
-          // No chats exist - show welcome message without creating a chat
-          // Chat will be created only when user sends their first message
-          setChatHistories([]);
+        }
+      } else {
+        // No chats exist - show welcome message without creating a chat
+        console.log(`ℹ️ No chats found for user ${currentUser.uid}`);
+        setChatHistories([]);
+        if (loadFirstChatMessages) {
           setCurrentChatId(null);
           setMessages([{
             id: Date.now().toString(),
@@ -141,13 +152,35 @@ const ChatPage = () => {
             sender: 'assistant',
             timestamp: new Date(),
           }]);
-          setIsLoadingChats(false);
         }
-      })
-      .catch((error) => {
-        console.error('Error loading chats:', error);
-        setIsLoadingChats(false);
-      });
+      }
+    } catch (error: any) {
+      console.error(`❌ Error refreshing chats for user ${currentUser.uid}:`, error);
+      showNotification(`Failed to load chats: ${error.message}`, 'error');
+      // Show welcome message even on error
+      setChatHistories([]);
+      if (loadFirstChatMessages) {
+        setCurrentChatId(null);
+        setMessages([{
+          id: Date.now().toString(),
+          text: 'Hello! I\'m your voice audit. Record a command to get started.',
+          sender: 'assistant',
+          timestamp: new Date(),
+        }]);
+      }
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/auth');
+      return;
+    }
+
+    // Load user data and chats on mount - always fetch from Firestore using user ID
+    refreshChatsFromFirestore(true);
 
     // Check backend connection
     checkBackendHealth()
@@ -462,22 +495,8 @@ const ChatPage = () => {
         ));
       }
       
-      // Refresh chat list to ensure proper ordering (chats ordered by updatedAt)
-      if (currentUser) {
-        loadUserChats(currentUser.uid)
-          .then((chats) => {
-            if (chats.length > 0) {
-              const formattedChats: ChatHistory[] = chats.map((chat) => ({
-                id: chat.id || Date.now().toString(),
-                title: chat.title,
-                messages: [],
-                createdAt: chat.createdAt instanceof Date ? chat.createdAt : new Date(),
-              }));
-              setChatHistories(formattedChats);
-            }
-          })
-          .catch(console.error);
-      }
+      // Refresh chat list from Firestore to ensure proper ordering (chats ordered by updatedAt)
+      await refreshChatsFromFirestore(false);
     } catch (error: any) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -494,22 +513,8 @@ const ChatPage = () => {
         chatId,
       }).catch(console.error);
       
-      // Refresh chat list to ensure proper ordering
-      if (currentUser) {
-        loadUserChats(currentUser.uid)
-          .then((chats) => {
-            if (chats.length > 0) {
-              const formattedChats: ChatHistory[] = chats.map((chat) => ({
-                id: chat.id || Date.now().toString(),
-                title: chat.title,
-                messages: [],
-                createdAt: chat.createdAt instanceof Date ? chat.createdAt : new Date(),
-              }));
-              setChatHistories(formattedChats);
-            }
-          })
-          .catch(console.error);
-      }
+      // Refresh chat list from Firestore to ensure proper ordering
+      await refreshChatsFromFirestore(false);
     } finally {
       setIsProcessing(false);
     }
@@ -603,13 +608,12 @@ const ChatPage = () => {
 
     try {
       const chatId = await createChat(currentUser.uid, 'New Chat');
-      const newChat: ChatHistory = {
-        id: chatId,
-        title: 'New Chat',
-        messages: [],
-        createdAt: new Date(),
-      };
-      setChatHistories((prev) => [newChat, ...prev]);
+      console.log(`✅ Created new chat ${chatId} for user ${currentUser.uid}`);
+      
+      // Refresh chats from Firestore to get the latest list
+      await refreshChatsFromFirestore(false);
+      
+      // Set the new chat as current
       setCurrentChatId(chatId);
       setMessages([
         {
@@ -621,6 +625,7 @@ const ChatPage = () => {
       ]);
     } catch (error) {
       console.error('Error creating new chat:', error);
+      showNotification('Failed to create new chat', 'error');
     }
   };
 
