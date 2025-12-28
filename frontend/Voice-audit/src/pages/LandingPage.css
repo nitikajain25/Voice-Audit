@@ -28,12 +28,15 @@
   align-items: center;
   justify-content: center;
   text-align: center;
+  width: 100%;
 }
 
 .landing-logo {
-  width: 120px;
-  height: 120px;
+  width: 200px;
+  height: 200px;
   margin-bottom: 1.5rem;
+  margin-left: auto;
+  margin-right: auto;
   opacity: 0;
   animation: fadeInUp 1s ease 0.1s forwards;
   object-fit: contain;
@@ -281,9 +284,11 @@
 
 @media (max-width: 768px) {
   .landing-logo {
-    width: 80px;
-    height: 80px;
+    width: 150px;
+    height: 150px;
     margin-bottom: 1rem;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .landing-title {
