@@ -23,13 +23,20 @@ import geminiRoute from "./routes/gemini.route";
 const app = express();
 
 // Get PORT from environment (Railway sets this automatically)
-// Railway will inject PORT environment variable, so we must use it
+// Railway ALWAYS sets PORT, so if it's not set, we're not on Railway
+// Default to 5000 only for local development
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
 
 // Validate PORT is a valid number
 if (isNaN(PORT) || PORT <= 0) {
   console.error("❌ Invalid PORT value:", process.env.PORT);
   process.exit(1);
+}
+
+// Warn if PORT is 5000 in production (Railway never uses 5000)
+if (process.env.NODE_ENV === "production" && PORT === 5000 && !process.env.PORT) {
+  console.warn("⚠️  WARNING: Running in production but PORT is defaulting to 5000.");
+  console.warn("⚠️  Railway should set PORT automatically. Check Railway configuration.");
 }
 
 // CORS configuration
@@ -116,9 +123,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log("✅ Backend server started successfully!");
   console.log("=".repeat(50));
   console.log(`🌐 Server running on: 0.0.0.0:${PORT}`);
-  console.log(`📡 PORT from environment: ${process.env.PORT || "not set (using default 5000)"}`);
+  console.log(`📡 PORT from environment: ${process.env.PORT ? process.env.PORT : "not set (using default 5000)"}`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`📦 Node version: ${process.version}`);
+  console.log(`🌍 Railway detected: ${process.env.RAILWAY_ENVIRONMENT ? "Yes" : "No"}`);
+  if (process.env.RAILWAY_ENVIRONMENT) {
+    console.log(`🚂 Railway environment: ${process.env.RAILWAY_ENVIRONMENT}`);
+  }
   console.log("=".repeat(50));
   
   // Validate required environment variables
