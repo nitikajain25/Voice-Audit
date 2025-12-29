@@ -23,7 +23,7 @@ const auth_route_1 = __importDefault(require("./routes/auth.route"));
 const user_route_1 = __importDefault(require("./routes/user.route"));
 const gemini_route_1 = __importDefault(require("./routes/gemini.route"));
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 // Middleware
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
@@ -52,8 +52,8 @@ app.use((_req, res) => {
         message: "Route not found",
     });
 });
-app.listen(PORT, () => {
-    console.log(`Backend running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend running on 0.0.0.0:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     // Validate required environment variables
     const requiredEnvVars = [

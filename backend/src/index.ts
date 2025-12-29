@@ -21,7 +21,7 @@ import userRoute from "./routes/user.route";
 import geminiRoute from "./routes/gemini.route";
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 // Middleware
 app.use(cors());
@@ -56,8 +56,8 @@ app.use((_req: Request, res: Response) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Backend running on 0.0.0.0:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
   
   // Validate required environment variables
