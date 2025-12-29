@@ -10,25 +10,50 @@ const router = (0, express_1.Router)();
  */
 router.get("/google/url", firebaseAuth_1.verifyFirebaseToken, async (req, res) => {
     try {
+        console.log("🔗 GET /api/auth/google/url - Request received");
         if (!req.user?.uid) {
+            console.error("❌ User authentication failed - no UID");
             res.status(401).json({
                 success: false,
                 message: "User authentication failed",
             });
             return;
         }
+        console.log("✅ User authenticated:", req.user.uid);
+        console.log("🔧 Environment check:");
+        console.log("   - GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID ? "✅ Set" : "❌ Missing");
+        console.log("   - GOOGLE_CLIENT_SECRET:", process.env.GOOGLE_CLIENT_SECRET ? "✅ Set" : "❌ Missing");
+        console.log("   - GOOGLE_REDIRECT_URI:", process.env.GOOGLE_REDIRECT_URI || "❌ Missing (will use default)");
+        console.log("   - NODE_ENV:", process.env.NODE_ENV || "development");
         // Pass userId in auth URL state parameter
         const authUrl = (0, googleOAuth_service_1.getAuthUrl)(req.user.uid);
+        console.log("✅ Authorization URL generated successfully");
+        console.log("   - URL length:", authUrl.length);
+        console.log("   - URL preview:", authUrl.substring(0, 100) + "...");
         res.json({
             success: true,
             authUrl,
         });
     }
     catch (error) {
-        console.error("Error generating auth URL:", error);
+        console.error("❌ Error generating auth URL:", error);
+        console.error("   - Error message:", error.message);
+        console.error("   - Error stack:", error.stack);
+        // Provide more detailed error message
+        let errorMessage = error.message || "Failed to generate authorization URL";
+        if (error.message?.includes("GOOGLE_CLIENT_ID")) {
+            errorMessage = "Google OAuth is not configured. Please set GOOGLE_CLIENT_ID in environment variables.";
+        }
+        else if (error.message?.includes("GOOGLE_CLIENT_SECRET")) {
+            errorMessage = "Google OAuth is not configured. Please set GOOGLE_CLIENT_SECRET in environment variables.";
+        }
+        else if (error.message?.includes("GOOGLE_REDIRECT_URI")) {
+            errorMessage = "Google OAuth redirect URI is not configured. Please set GOOGLE_REDIRECT_URI in environment variables.";
+        }
         res.status(500).json({
             success: false,
-            message: error.message || "Failed to generate authorization URL",
+            message: errorMessage,
+            details: process.env.NODE_ENV === "development" ? error.stack : undefined,
         });
     }
 });
@@ -39,15 +64,30 @@ router.get("/google/url", firebaseAuth_1.verifyFirebaseToken, async (req, res) =
 router.get("/google/callback", async (req, res) => {
     try {
         const { code, state } = req.query;
+        console.log("📥 OAuth callback received");
+        console.log("   - Full URL:", req.url);
+        console.log("   - Query params:", { code: code ? "present" : "missing", state });
+        console.log("   - Environment check:");
+        console.log("     - GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID ? "✅ Set" : "❌ Missing");
+        console.log("     - GOOGLE_CLIENT_SECRET:", process.env.GOOGLE_CLIENT_SECRET ? "✅ Set" : "❌ Missing");
+        console.log("     - GOOGLE_REDIRECT_URI:", process.env.GOOGLE_REDIRECT_URI || "❌ Missing");
         if (!code || typeof code !== "string") {
-            res.status(400).json({
-                success: false,
-                message: "Authorization code is required",
-            });
+            console.error("❌ No authorization code received");
+            res.status(400).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Error</title></head>
+          <body style="font-family: Arial; padding: 2rem; text-align: center; background: #fee; color: #c00;">
+            <h1>❌ Error</h1>
+            <p>Authorization code is required but was not received.</p>
+            <p>Please try connecting Google again from the app.</p>
+            <script>setTimeout(() => window.close(), 5000);</script>
+          </body>
+          </html>
+        `);
             return;
         }
-        console.log("📥 OAuth callback received");
-        console.log("   - Code:", code.substring(0, 20) + "...");
+        console.log("   - Code received:", code.substring(0, 20) + "...");
         console.log("   - State:", state);
         // Extract userId from state parameter (passed from frontend in auth URL)
         const userId = state;

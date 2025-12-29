@@ -23,14 +23,60 @@ import geminiRoute from "./routes/gemini.route";
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
+// CORS configuration
+const corsOptions = {
+  origin: function (_origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    // In production, you can restrict to specific origins
+    // For now, allow all origins for easier deployment
+    callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Log all requests in development
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, _res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
+  });
+}
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", message: "Backend is running" });
+});
+
+// Diagnostic endpoint for OAuth configuration
+app.get("/api/diagnostics/oauth", (_req: Request, res: Response) => {
+  const diagnostics = {
+    environment: process.env.NODE_ENV || "development",
+    googleOAuth: {
+      clientId: process.env.GOOGLE_CLIENT_ID ? "✅ Set" : "❌ Missing",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ? "✅ Set" : "❌ Missing",
+      redirectUri: process.env.GOOGLE_REDIRECT_URI || "❌ Missing",
+      redirectUriValid: process.env.GOOGLE_REDIRECT_URI 
+        ? (process.env.GOOGLE_REDIRECT_URI.includes("localhost") && process.env.NODE_ENV === "production" ? "⚠️ Localhost in production" : "✅ Valid")
+        : "❌ Not set",
+    },
+    firebase: {
+      serviceAccount: process.env.FIREBASE_SERVICE_ACCOUNT ? "✅ Set (JSON string)" : 
+                     (process.env.FIREBASE_SERVICE_ACCOUNT_PATH ? "✅ Set (file path)" : "❌ Missing"),
+    },
+    gemini: {
+      apiKey: process.env.GEMINI_API_KEY ? "✅ Set" : "❌ Missing",
+    },
+    timestamp: new Date().toISOString(),
+  };
+  
+  res.json(diagnostics);
 });
 
 // Routes
