@@ -9,6 +9,7 @@ import {
   loadUserChats, 
   loadChatMessages,
   updateChatTitle,
+  deleteChat,
   loadUserProfile,
   updateUserProfile,
   uploadProfilePhoto,
@@ -66,6 +67,7 @@ const ChatPage = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [openMenuChatId, setOpenMenuChatId] = useState<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -398,7 +400,6 @@ const ChatPage = () => {
 
     // Don't create chat yet - wait for valid response
     let chatId = currentChatId;
-    let chatJustCreated = false;
 
     // Check if command likely requires Google (quick check before sending)
     const lowerText = text.toLowerCase();
@@ -410,6 +411,22 @@ const ChatPage = () => {
 
     // If command needs Google but not connected, show helpful message
     if (needsGoogle && !isGoogleConnected) {
+      // Ensure we have a chat ID - create chat if needed
+      if (!chatId) {
+        const newTitle = text.substring(0, 30) || 'New Chat';
+        chatId = await createChat(currentUser.uid, newTitle);
+        setCurrentChatId(chatId);
+        
+        // Add new chat to chatHistories
+        const newChat: ChatHistory = {
+          id: chatId,
+          title: newTitle,
+          messages: [],
+          createdAt: new Date(),
+        };
+        setChatHistories((prev) => [newChat, ...prev]);
+      }
+
       const userMessage: Message = {
         id: Date.now().toString(),
         text: text.trim(),
@@ -427,6 +444,7 @@ const ChatPage = () => {
       setMessages((prev) => [...prev, errorMessage]);
       
       // Save both messages to Firestore even though command failed
+      // chatId is guaranteed to be a string at this point
       saveMessage(chatId, {
         text: text.trim(),
         sender: 'user',
@@ -523,7 +541,6 @@ const ChatPage = () => {
           const newTitle = text.substring(0, 30) || 'New Chat';
           chatId = await createChat(currentUser.uid, newTitle);
           setCurrentChatId(chatId);
-          chatJustCreated = true;
           
           // Add new chat to chatHistories
           const newChat: ChatHistory = {
@@ -815,6 +832,7 @@ const ChatPage = () => {
     const chat = chatHistories.find((c) => c.id === chatId);
     if (chat) {
       setCurrentChatId(chatId);
+      setOpenMenuChatId(null); // Close menu when selecting chat
       
       // Load messages from Firestore
       try {
@@ -849,6 +867,171 @@ const ChatPage = () => {
         ]);
       }
     }
+  };
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      // Check if click is on a menu button (to allow toggling)
+      const menuButton = target.closest('.chat-item-menu-btn');
+      if (menuButton) {
+        return; // Allow menu button clicks to handle toggle
+      }
+      
+      // Check if click is inside any menu dropdown
+      const menuDropdown = target.closest('.chat-item-menu-dropdown');
+      if (menuDropdown) {
+        return; // Click is inside menu, don't close
+      }
+      
+      // Click is outside menu, close it
+      setOpenMenuChatId(null);
+    };
+
+    if (openMenuChatId) {
+      // Use a small delay to avoid closing immediately when opening
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 100);
+
+      return () => {
+        clearTimeout(timeoutId);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [openMenuChatId]);
+
+  const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent chat selection
+    setOpenMenuChatId(null);
+
+    if (!window.confirm('Are you sure you want to delete this chat? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteChat(chatId);
+      
+      // Remove from local state
+      setChatHistories(prev => prev.filter(chat => chat.id !== chatId));
+      
+      // If deleted chat was current, clear it
+      if (currentChatId === chatId) {
+        setCurrentChatId(null);
+        setMessages([
+          {
+            id: Date.now().toString(),
+            text: 'Hello! I\'m your voice audit. Record a command to get started.',
+            sender: 'assistant',
+            timestamp: new Date(),
+          },
+        ]);
+      }
+      
+      showNotification('Chat deleted successfully', 'success');
+    } catch (error: any) {
+      console.error('Error deleting chat:', error);
+      showNotification(`Failed to delete chat: ${error.message}`, 'error');
+    }
+  };
+
+  const handleExportChat = async (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent chat selection
+    setOpenMenuChatId(null);
+
+    try {
+      // Load messages for this chat
+      const loadedMessages = await loadChatMessages(chatId);
+      const chat = chatHistories.find(c => c.id === chatId);
+      
+      if (loadedMessages.length === 0) {
+        showNotification('This chat has no messages to export', 'error');
+        return;
+      }
+
+      // Format messages for export
+      let exportText = `Chat: ${chat?.title || 'Untitled Chat'}\n`;
+      exportText += `Exported on: ${new Date().toLocaleString()}\n`;
+      exportText += `${'='.repeat(50)}\n\n`;
+
+      loadedMessages.forEach((msg) => {
+        const timestamp = msg.timestamp instanceof Date 
+          ? msg.timestamp.toLocaleString() 
+          : new Date().toLocaleString();
+        const sender = msg.sender === 'user' ? 'You' : 'Assistant';
+        exportText += `[${timestamp}] ${sender}:\n${msg.text}\n\n`;
+      });
+
+      // Create blob and download
+      const blob = new Blob([exportText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${chat?.title || 'chat'}_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showNotification('Chat exported successfully', 'success');
+    } catch (error: any) {
+      console.error('Error exporting chat:', error);
+      showNotification(`Failed to export chat: ${error.message}`, 'error');
+    }
+  };
+
+  const handleShareChat = async (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent chat selection
+    setOpenMenuChatId(null);
+
+    try {
+      // Load messages for this chat
+      const loadedMessages = await loadChatMessages(chatId);
+      const chat = chatHistories.find(c => c.id === chatId);
+      
+      if (loadedMessages.length === 0) {
+        showNotification('This chat has no messages to share', 'error');
+        return;
+      }
+
+      // Format messages for sharing
+      let shareText = `Chat: ${chat?.title || 'Untitled Chat'}\n`;
+      shareText += `${'='.repeat(50)}\n\n`;
+
+      loadedMessages.forEach((msg) => {
+        const timestamp = msg.timestamp instanceof Date 
+          ? msg.timestamp.toLocaleString() 
+          : new Date().toLocaleString();
+        const sender = msg.sender === 'user' ? 'You' : 'Assistant';
+        shareText += `[${timestamp}] ${sender}:\n${msg.text}\n\n`;
+      });
+
+      // Copy to clipboard
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareText);
+        showNotification('Chat copied to clipboard!', 'success');
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = shareText;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        showNotification('Chat copied to clipboard!', 'success');
+      }
+    } catch (error: any) {
+      console.error('Error sharing chat:', error);
+      showNotification(`Failed to share chat: ${error.message}`, 'error');
+    }
+  };
+
+  const toggleChatMenu = (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent chat selection
+    setOpenMenuChatId(openMenuChatId === chatId ? null : chatId);
   };
 
   return (
@@ -908,6 +1091,40 @@ const ChatPage = () => {
                 >
                   <i className="bi bi-chat-left-text chat-icon"></i>
                   <span className="chat-title">{chat.title}</span>
+                  <div className="chat-item-menu-container">
+                    <button
+                      className="chat-item-menu-btn"
+                      onClick={(e) => toggleChatMenu(chat.id, e)}
+                      title="Chat options"
+                    >
+                      <i className="bi bi-three-dots-vertical"></i>
+                    </button>
+                    {openMenuChatId === chat.id && (
+                      <div className="chat-item-menu-dropdown">
+                        <button
+                          className="chat-menu-item"
+                          onClick={(e) => handleExportChat(chat.id, e)}
+                        >
+                          <i className="bi bi-download"></i>
+                          <span>Export</span>
+                        </button>
+                        <button
+                          className="chat-menu-item"
+                          onClick={(e) => handleShareChat(chat.id, e)}
+                        >
+                          <i className="bi bi-share"></i>
+                          <span>Share</span>
+                        </button>
+                        <button
+                          className="chat-menu-item chat-menu-item-danger"
+                          onClick={(e) => handleDeleteChat(chat.id, e)}
+                        >
+                          <i className="bi bi-trash"></i>
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))
             )}

@@ -106,7 +106,7 @@ export async function routeAction(
       
       return {
         success: false,
-        action: geminiResponse.action,
+        action: geminiResponse.action || "unknown",
         message: `🔗 Google account not connected. To use ${actionType}, please click the "🔗 Connect Google" button in the sidebar (bottom left) and complete the authorization.`,
         requiresAuth: true,
       };

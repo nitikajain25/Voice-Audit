@@ -42,15 +42,36 @@ router.post("/process", firebaseAuth_1.verifyFirebaseToken, async (req, res) => 
             });
             return;
         }
-        // Route to appropriate Google service
-        console.log("🔄 Routing action:", geminiResponse.action);
-        const result = await (0, actionRouter_service_1.routeAction)(req.user.uid, geminiResponse);
-        console.log("✅ Action result:", result.success ? "Success" : "Failed");
-        if (result.success) {
-            res.status(200).json(result);
+        // Check if multiple actions are requested
+        if (geminiResponse.actions && Array.isArray(geminiResponse.actions) && geminiResponse.actions.length > 0) {
+            console.log(`🔄 Routing ${geminiResponse.actions.length} action(s)`);
+            const multiResult = await (0, actionRouter_service_1.routeMultipleActions)(req.user.uid, geminiResponse.actions);
+            console.log(`✅ Multi-action result: ${multiResult.successfulActions}/${multiResult.totalActions} successful`);
+            if (multiResult.success) {
+                res.status(200).json(multiResult);
+            }
+            else {
+                res.status(400).json(multiResult);
+            }
         }
         else {
-            res.status(400).json(result);
+            // Single action
+            if (!geminiResponse.action) {
+                res.status(400).json({
+                    success: false,
+                    message: "No action detected in the input. Please be more specific.",
+                });
+                return;
+            }
+            console.log("🔄 Routing action:", geminiResponse.action);
+            const result = await (0, actionRouter_service_1.routeAction)(req.user.uid, geminiResponse);
+            console.log("✅ Action result:", result.success ? "Success" : "Failed");
+            if (result.success) {
+                res.status(200).json(result);
+            }
+            else {
+                res.status(400).json(result);
+            }
         }
     }
     catch (error) {

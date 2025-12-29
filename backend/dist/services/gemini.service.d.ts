@@ -1,5 +1,6 @@
 export interface GeminiResponse {
-    action: "calendar" | "task" | "email" | "unknown";
+    action?: "calendar" | "task" | "email" | "unknown";
+    actions?: GeminiResponse[];
     title?: string;
     description?: string;
     date?: string;

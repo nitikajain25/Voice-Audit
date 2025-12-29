@@ -6,6 +6,7 @@ import {
   getDocs, 
   addDoc, 
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -384,6 +385,32 @@ export async function updateChatTitle(chatId: string, title: string): Promise<vo
     console.log("✅ Chat title updated");
   } catch (error) {
     console.error("❌ Error updating chat title:", error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a chat and all its messages permanently
+ */
+export async function deleteChat(chatId: string): Promise<void> {
+  try {
+    // First, delete all messages in the chat subcollection
+    const messagesRef = collection(db, "chats", chatId, "messages");
+    const messagesSnapshot = await getDocs(messagesRef);
+    
+    // Delete all messages
+    const deletePromises = messagesSnapshot.docs.map((messageDoc) => 
+      deleteDoc(doc(db, "chats", chatId, "messages", messageDoc.id))
+    );
+    await Promise.all(deletePromises);
+    
+    // Then delete the chat document itself
+    const chatRef = doc(db, "chats", chatId);
+    await deleteDoc(chatRef);
+    
+    console.log(`✅ Chat ${chatId} and all its messages deleted permanently`);
+  } catch (error) {
+    console.error("❌ Error deleting chat:", error);
     throw error;
   }
 }
