@@ -1,4 +1,5 @@
-declare const oauth2Client: import("googleapis-common").OAuth2Client;
+declare function createOAuth2Client(): import("googleapis-common").OAuth2Client;
+declare let oauth2Client: ReturnType<typeof createOAuth2Client>;
 export declare const SCOPES: string[];
 /**
  * Get authorization URL for OAuth2 flow

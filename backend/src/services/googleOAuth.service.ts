@@ -1,13 +1,59 @@
 import { google } from "googleapis";
 import admin from "../firebaseAdmin";
 
-// Initialize OAuth2 client (with fallback values for testing)
+// Get redirect URI - validate it's set in production
+function getRedirectUri(): string {
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  
+  if (!redirectUri) {
+    // In production, this should be set
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "GOOGLE_REDIRECT_URI is required in production. " +
+        "Please set it in your environment variables to your production backend URL + /api/auth/google/callback"
+      );
+    }
+    // Development fallback
+    return "http://localhost:5000/api/auth/google/callback";
+  }
+  
+  // Validate it's not localhost in production
+  if (process.env.NODE_ENV === "production" && redirectUri.includes("localhost")) {
+    console.warn("⚠️  WARNING: GOOGLE_REDIRECT_URI contains localhost in production. This will not work!");
+  }
+  
+  return redirectUri;
+}
+
+// Initialize OAuth2 client
 // Create OAuth2Client using the correct googleapis method
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID || "dummy-client-id",
-  process.env.GOOGLE_CLIENT_SECRET || "dummy-client-secret",
-  process.env.GOOGLE_REDIRECT_URI || "http://localhost:5000/api/auth/google/callback"
-);
+function createOAuth2Client() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = getRedirectUri();
+  
+  if (!clientId || clientId === "dummy-client-id") {
+    throw new Error("GOOGLE_CLIENT_ID is not configured. Please set it in environment variables.");
+  }
+  
+  if (!clientSecret || clientSecret === "dummy-client-secret") {
+    throw new Error("GOOGLE_CLIENT_SECRET is not configured. Please set it in environment variables.");
+  }
+  
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+// Create OAuth2 client instance
+let oauth2Client: ReturnType<typeof createOAuth2Client>;
+
+// Lazy initialization to catch errors early but allow module to load
+try {
+  oauth2Client = createOAuth2Client();
+} catch (error: any) {
+  console.warn("⚠️  OAuth2 client initialization failed:", error.message);
+  // Create a dummy client that will throw errors when used
+  oauth2Client = new google.auth.OAuth2("dummy", "dummy", "http://localhost:5000/api/auth/google/callback");
+}
 
 // Scopes required for Calendar, Tasks, and Gmail
 export const SCOPES = [
@@ -21,20 +67,30 @@ export const SCOPES = [
  * @param userId - User ID to include in state parameter for callback
  */
 export function getAuthUrl(userId?: string): string {
+  // Recreate OAuth2 client to ensure it has latest environment variables
+  try {
+    oauth2Client = createOAuth2Client();
+  } catch (error: any) {
+    throw new Error(`OAuth2 client configuration error: ${error.message}`);
+  }
+  
   // Validate OAuth2 client configuration
   if (!process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID === "dummy-client-id") {
-    throw new Error("GOOGLE_CLIENT_ID is not configured. Please set it in .env file.");
+    throw new Error("GOOGLE_CLIENT_ID is not configured. Please set it in environment variables.");
   }
   
   if (!process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET === "dummy-client-secret") {
-    throw new Error("GOOGLE_CLIENT_SECRET is not configured. Please set it in .env file.");
+    throw new Error("GOOGLE_CLIENT_SECRET is not configured. Please set it in environment variables.");
   }
 
+  const redirectUri = getRedirectUri();
+  
   console.log("🔗 Generating OAuth authorization URL...");
   console.log("   - Client ID:", process.env.GOOGLE_CLIENT_ID.substring(0, 20) + "...");
-  console.log("   - Redirect URI:", process.env.GOOGLE_REDIRECT_URI || "http://localhost:5000/api/auth/google/callback");
+  console.log("   - Redirect URI:", redirectUri);
   console.log("   - User ID in state:", userId || "default");
   console.log("   - Scopes:", SCOPES.length, "scopes");
+  console.log("   - Environment:", process.env.NODE_ENV || "development");
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline", // Required to get refresh token
@@ -58,14 +114,24 @@ export async function getTokensFromCode(code: string): Promise<{
   try {
     console.log("🔄 Exchanging authorization code for tokens...");
     
+    // Recreate OAuth2 client to ensure it has latest environment variables
+    try {
+      oauth2Client = createOAuth2Client();
+    } catch (error: any) {
+      throw new Error(`OAuth2 client configuration error: ${error.message}`);
+    }
+    
     // Validate OAuth2 client configuration
     if (!process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID === "dummy-client-id") {
-      throw new Error("GOOGLE_CLIENT_ID is not set. Please configure it in .env file.");
+      throw new Error("GOOGLE_CLIENT_ID is not set. Please configure it in environment variables.");
     }
     
     if (!process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET === "dummy-client-secret") {
-      throw new Error("GOOGLE_CLIENT_SECRET is not set. Please configure it in .env file.");
+      throw new Error("GOOGLE_CLIENT_SECRET is not set. Please configure it in environment variables.");
     }
+
+    const redirectUri = getRedirectUri();
+    console.log("   - Using Redirect URI:", redirectUri);
 
     const { tokens } = await oauth2Client.getToken(code);
     
@@ -174,6 +240,13 @@ export async function getValidAccessToken(userId: string): Promise<string> {
 
   if (tokens.expiry_date - now < expiryBuffer) {
     // Token expired or about to expire, refresh it
+    // Recreate OAuth2 client to ensure it has latest environment variables
+    try {
+      oauth2Client = createOAuth2Client();
+    } catch (error: any) {
+      throw new Error(`OAuth2 client configuration error: ${error.message}`);
+    }
+    
     oauth2Client.setCredentials({
       refresh_token: tokens.refresh_token,
     });
@@ -201,6 +274,13 @@ export async function getValidAccessToken(userId: string): Promise<string> {
  * Get authenticated OAuth2 client for a user
  */
 export async function getAuthenticatedClient(userId: string): Promise<typeof oauth2Client> {
+  // Recreate OAuth2 client to ensure it has latest environment variables
+  try {
+    oauth2Client = createOAuth2Client();
+  } catch (error: any) {
+    throw new Error(`OAuth2 client configuration error: ${error.message}`);
+  }
+  
   const accessToken = await getValidAccessToken(userId);
   const tokens = await getUserTokens(userId);
   
