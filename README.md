@@ -582,7 +582,7 @@ Include: description, steps to reproduce, expected vs actual behavior, screensho
 <tr>
 <td align="center">
 <a href="https://github.com/Rachitneema03">
-<img src="https://github.com/Rachitneema03.png" width="100px;" alt="Rachit Nima"/>
+<img src="https://github.com/Rachitneema03.png" width="100px;" alt="Rachit Nieema"/>
 <br />
 <sub><b>Rachit Neema</b></sub>
 </a>
@@ -600,7 +600,7 @@ Backend, Database, Security
 </td>
 <td align="center">
 <a href="https://github.com">
-<img src="https://github.com/github.png" width="100px;" alt="Sumadha Mandlo"/>
+<img src="https://github.com/github.png" width="100px;" alt="Sumadha Mandloi"/>
 <br />
 <sub><b>Sumadha Mandlo</b></sub>
 </a>
