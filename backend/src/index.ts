@@ -40,20 +40,23 @@ if (process.env.NODE_ENV === "production" && PORT === 5000 && !process.env.PORT)
 }
 
 // CORS configuration
-const corsOptions = {
-  origin: function (_origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    // In production, you can restrict to specific origins
-    // For now, allow all origins for easier deployment
-    callback(null, true);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+// const corsOptions = {
+//   origin: function (_origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+//     // Allow requests with no origin (like mobile apps or curl requests)
+//     // In production, you can restrict to specific origins
+//     // For now, allow all origins for easier deployment
+//     callback(null, true);
+//   },
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+// };
 
 // Middleware
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: "https://voice-audit-69te.vercel.app",
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
