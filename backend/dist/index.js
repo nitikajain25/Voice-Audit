@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const cors_2 = require("./cors");
 // Load environment variables FIRST
 dotenv_1.default.config();
 // Initialize Firebase Admin (may fail if serviceAccount.json is missing, but we'll handle it)
@@ -37,20 +38,11 @@ if (process.env.NODE_ENV === "production" && PORT === 5000 && !process.env.PORT)
     console.warn("⚠️  WARNING: Running in production but PORT is defaulting to 5000.");
     console.warn("⚠️  Railway should set PORT automatically. Check Railway configuration.");
 }
-// CORS configuration
-const corsOptions = {
-    origin: function (_origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        // In production, you can restrict to specific origins
-        // For now, allow all origins for easier deployment
-        callback(null, true);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-};
-// Middleware
-app.use((0, cors_1.default)(corsOptions));
+// CORS configuration - using the centralized corsOptions from cors.ts
+// This handles multiple origins, Vercel preview deployments, and local development
+app.use((0, cors_1.default)(cors_2.corsOptions));
+// Explicit OPTIONS handler for preflight requests (additional safety)
+app.options("*", (0, cors_1.default)(cors_2.corsOptions));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 // Log all requests in development

@@ -84,8 +84,6 @@ export const corsOptions: CorsOptionsDelegate<Request> = (
         "Accept",
       ],
       exposedHeaders: ["Content-Disposition"],
-      preflightContinue: false,
-      optionsSuccessStatus: 204,
     });
   } else {
     // Origin not allowed - log for debugging
